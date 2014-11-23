@@ -12,12 +12,14 @@ pkg=`basename $fle`
 dir=`dirname $fle`
 
 DOCKER_PATH="/var/lib/docker" # where your subvolumes live
-DOCKER_IMG="pbocker"
+
+DOCKER_IMG="pbocker" # should match your docker build -t $img .
+DOCKER_NAME="pbocker-`date +%S`" # an effort on randomness
 DOCKER_OPTS="--privileged=true" # required for debootstrap
-PBUILDER_OPTS="--http-proxy http://172.17.42.1:3142"
+PBUILDER_OPTS="--http-proxy http://172.17.42.1:3142" # e.g., if you're using acng
 
 # Check system requirements
-for req in docker jq lintian
+for req in docker jq
 do
   which $req > /dev/null 2>&1
   if [ $? -ne 0 ]
@@ -45,13 +47,14 @@ else
 
   # Run docker
   docker run $DOCKER_OPTS \
+    --name=$DOCKER_NAME \
     -v $dir:/opt/packages \
     $DOCKER_IMG \
     pbuilder --build $PBUILDER_OPTS /opt/packages/$pkg
 fi
 
 # Check results
-for workingdir in `docker inspect $DOCKER_IMG | jq -r --arg DPATH $DOCKER_PATH '.[] | $DPATH + "/" + .Driver + "/subvolumes/" + .Id'`
+for workingdir in `docker inspect $DOCKER_NAME | jq -r --arg DPATH $DOCKER_PATH '.[] | $DPATH + "/" + .Driver + "/subvolumes/" + .Id'`
 do
   pkgpath="$workingdir/var/cache/pbuilder/result/$pkg"
   if [ -f $pkgpath ]
