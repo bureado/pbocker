@@ -1,0 +1,62 @@
+#!/bin/sh
+
+#
+# pbocker-build.sh - builds packages using a pbocker Docker image
+#
+#  (C) 2014 Jose Miguel Parrella <j@bureado.com>
+#  Free and open source script released under the terms of the Apache License, Version 2.0
+#
+
+fle=$1
+pkg=`basename $fle`
+dir=`dirname $fle`
+
+DOCKER_PATH="/var/lib/docker" # where your subvolumes live
+DOCKER_IMG="pbocker"
+DOCKER_OPTS="--privileged=true" # required for debootstrap
+PBUILDER_OPTS="--http-proxy http://172.17.42.1:3142"
+
+# Check system requirements
+for req in docker jq lintian
+do
+  which $req > /dev/null 2>&1
+  if [ $? -ne 0 ]
+  then
+    echo "$req is required"
+    exit 1
+  fi
+done
+
+# Check absolute path
+echo $dir | grep '^/' > /dev/null 2>&1
+if [ $? -ne 0 ]
+then
+  echo "$fle is not an absolute path"
+  exit 1
+fi
+
+# Check file exists
+if [ ! -f $1 ]
+then
+  echo "File $1 doesn't exist"
+  exit 1
+else
+  echo "Building $pkg on $fle"
+
+  # Run docker
+  docker run $DOCKER_OPTS \
+    -v $dir:/opt/packages \
+    $DOCKER_IMG \
+    pbuilder --build $PBUILDER_OPTS /opt/packages/$pkg
+fi
+
+# Check results
+for workingdir in `docker inspect $DOCKER_IMG | jq -r --arg DPATH $DOCKER_PATH '.[] | $DPATH + "/" + .Driver + "/subvolumes/" + .Id'`
+do
+  pkgpath="$workingdir/var/cache/pbuilder/result/$pkg"
+  if [ -f $pkgpath ]
+  then
+    echo "pbuilder results on $pkgpath"
+    ls -al `dirname $pkgpath`
+  fi
+done
